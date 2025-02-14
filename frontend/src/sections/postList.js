@@ -1,13 +1,18 @@
 import React, { useEffect, useState } from "react";
-import axios from "axios";
+import { useNavigate } from 'react-router-dom';
 import Swal from "sweetalert2";
-import { endpoints } from "../config/apiConfig";
 import { Modal } from "react-bootstrap-v5";
-import { X } from 'lucide-react';
+import { X, Eye, Pencil, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+import DatePicker from "react-datepicker";
+import { paths } from "../routes/path";
+import { site_url } from "../config/envConfig";
+import { deletePost, fetchAllPosts, updatePosts } from "../api/post";
+import "react-datepicker/dist/react-datepicker.css";
 import "bootstrap/dist/css/bootstrap.min.css";
 
 // ---------------------------------------------------------------------------------------------------------------
 function PostList() {
+  const navigate = useNavigate();
   const [posts, setPosts] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -16,6 +21,11 @@ function PostList() {
   const [showModal, setShowModal] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const perPage = 10;
+
+  // Filters
+  const [status, setStatus] = useState("any");
+  const [startDate, setStartDate] = useState(null);
+  const [endDate, setEndDate] = useState(null);
 
   // Handle window resizing for responsive layout
   useEffect(() => {
@@ -29,39 +39,27 @@ function PostList() {
     };
   }, []);
 
-  const fetchAllPosts = async () => {
+  const loadPosts = async () => {
     try {
-      const response = await axios.get(
-        `${endpoints.posts.list}?per_page=${perPage}&page=${currentPage}`
-      );
-      const { data } = response.data;
-      setPosts(data);
-      setHasMorePages(data.length === perPage);
-    } catch (err) {
-      console.error("Error fetching posts:", err);
-    }
-  };
+      const data = await fetchAllPosts(
+          perPage, 
+          currentPage,
+          status,
+          startDate ? startDate.toISOString() : null,
+          endDate ? endDate.toISOString() : null,
+          searchTerm
+        );
 
-  const searchPosts = async () => {
-    try {
-      const response = await axios.post("http://localhost:8099/search", {
-        search: searchTerm,
-        per_page: perPage,
-      });
-      setPosts(response.data.data || []);
-      setHasMorePages(false);
+      setPosts(data || []);
+      setHasMorePages(data?.length === perPage);
     } catch (err) {
-      console.error("Error searching posts:", err);
+      console.error("Error loading posts:", err);
     }
   };
 
   useEffect(() => {
-    if (searchTerm.trim()) {
-      searchPosts();
-    } else {
-      fetchAllPosts();
-    }
-  }, [currentPage, searchTerm]);
+    loadPosts();
+  }, [currentPage, searchTerm, status, startDate, endDate]);
 
   const handleDelete = async (id) => {
     try {
@@ -75,9 +73,9 @@ function PostList() {
         confirmButtonText: "Yes, delete it!",
       }).then(async (result) => {
         if (result.isConfirmed) {
-          await axios.delete(`http://localhost:8099/${id}`);
+          await deletePost(id);
           Swal.fire("Deleted!", "Your post has been deleted.", "success");
-          fetchAllPosts();
+          loadPosts();
         }
       });
     } catch (err) {
@@ -100,19 +98,77 @@ function PostList() {
     setShowModal(true);
   };
 
+  const handleSiteViewPost = (postSlug) => {
+    window.open(`${site_url}/${postSlug}`, "_blank");
+  };
+
+  const handleStatusChange = async(post, status) => {
+    try{
+      const data = {
+        postId : post.id,
+        postTitle: `${post.title.rendered}`,
+        postSlug: post.slug,
+        status,
+        postContent: `${post.content.rendered}`
+    };
+    console.log('data', data);
+    const response = await updatePosts(data);
+    if(response.status === 1){
+      Swal.fire("Updated!", `Status has been updated to ${status}`, "success");
+      loadPosts();
+    }else{
+      Swal.fire("Error!", `Error occured while updating status to ${status}`, "error");
+    }
+    }catch(error){
+      console.error("error :",error);
+    }
+  }
+
   return (
     <div className="d-flex flex-column align-items-center vh-100" style={{ backgroundColor: "#fafafb" }}>
       <div className="container bg-white rounded shadow p-4" style={{marginTop : isMobile ? '10px' : '30px'}}>
         {/* Header Section */}
         <div className="d-flex justify-content-between align-items-center mb-3">
           <input
+            style={{width:'60%'}}
             type="text"
             placeholder="🔍 Search posts..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="form-control w-50 border-0 shadow-sm"
+            className="form-control border-0 shadow-sm"
           />
-          <button className="btn btn-primary fw-bold px-4">+ Add Post</button>
+
+          <button onClick={() => navigate(paths.posts.create)} className="btn btn-primary fw-bold px-4">+ Add Post</button>
+        </div>
+        
+        <div className="d-flex justify-content-start align-items-center mb-3">
+          {/* Status Dropdown */}
+          <select
+              className="form-select w-25 mx-2"
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+            >
+              <option value="any">All posts</option>
+              <option value="draft">Draft</option>
+              <option value="publish">Published</option>
+          </select>
+
+          {/* Date Range Picker */}
+          <div className="d-flex align-items-center my-3">
+            <DatePicker
+              selected={startDate}
+              onChange={(date) => setStartDate(date)}
+              className="form-control"
+              placeholderText="Start Date"
+            />
+            <span className="mx-2">to</span>
+            <DatePicker
+              selected={endDate}
+              onChange={(date) => setEndDate(date)}
+              className="form-control"
+              placeholderText="End Date"
+            />
+          </div>
         </div>
 
         {/* Table */}
@@ -120,48 +176,86 @@ function PostList() {
           <table className="table table-hover">
             <thead className="table-dark">
               <tr>
-                <th>Title</th>
-                <th>Content</th>
-                <th className="text-center">Actions</th>
+                <th style={{ width: "35%" }}>Title</th>
+                <th style={{ width: "15%" }} className="text-center">Status</th>
+                <th style={{ width: "25%" }} className="text-center">Content</th>
+                <th style={{ width: "25%" }} className="text-center">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {posts.map((post, i) => (
+              {posts.length > 0 ? posts.map((post, i) => (
                 <tr key={i} style={{ backgroundColor: i % 2 === 0 ? "#f8f9fa" : "white" }}>
                   <td className="fw-bold">{post.title.rendered}</td>
-                  <td className="text-center" style={{ width: "100px", whiteSpace: "nowrap" }}>
-                    <button
-                      className="btn btn-info btn-sm text-white"
-                      onClick={() => handleViewPost(post)}
+                  <td className="text-center">
+                    <select
+                      value={post.status}
+                      onChange={(e) => handleStatusChange(post, e.target.value)}
+                      className="form-select form-select-sm"
+                      style={{
+                        width: "120px",
+                        color: post.status === "draft" ? "#dc3545" : "#198754",
+                        fontWeight: "bold",
+                      }}
                     >
-                      {isMobile ? '👀 View ' : '👀 View Post'}
-                    </button>
+                      <option value="draft" style={{ color: "#dc3545" }}>Draft</option>
+                      <option value="publish" style={{ color: "#198754" }}>Publish</option>
+                    </select>
                   </td>
-                  <td className="text-center" style={{ whiteSpace: "nowrap" }}>
-                    <button className="btn btn-warning btn-sm mx-1 text-white">
-                      {isMobile ? '✏️' : '✏️ Edit'}
-                    </button>
-                    <button
-                      className="btn btn-danger btn-sm"
-                      onClick={() => handleDelete(post.id)}
-                    >
-                      {isMobile ? '🗑' : '🗑 Delete'}
-                    </button>
+                  <td className="text-center" style={{ whiteSpace: "nowrap", width: "25%" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "4px" }}>
+                      <button
+                        className="btn btn-info btn-sm text-white mx-1 d-flex align-items-center"
+                        onClick={() => handleViewPost(post)}
+                      >
+                        <Eye size={16} className="me-1" />
+                        {isMobile ? '' : 'View'}
+                      </button>
+                      <button
+                        className="btn btn-info btn-sm text-white mx-1 d-flex align-items-center"
+                        onClick={() => handleSiteViewPost(post.slug)}
+                      >
+                        {isMobile ? 'Site' : 'Site View'}
+                      </button>
+                    </div>
+                  </td>
+
+                  <td className="text-center" style={{ whiteSpace: "nowrap", width: "25%" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "4px" }}>
+                      <button onClick={() => {navigate(paths.posts.update(post?.id))}} className="btn btn-warning btn-sm text-white mx-1 d-flex align-items-center">
+                        <Pencil size={16} className="me-1" />
+                        {isMobile ? '' : 'Edit'}
+                      </button>
+                      <button
+                        className="btn btn-danger btn-sm d-flex align-items-center"
+                        onClick={() => handleDelete(post.id)}
+                      >
+                        <Trash2 size={16} className="me-1" />
+                        {isMobile ? '' : 'Delete'}
+                      </button>
+                    </div>
                   </td>
                 </tr>
-              ))}
+              )) : (
+                <tr>
+                  <td colSpan="4" className="text-center p-4">
+                    <div className="d-flex flex-column align-items-center">
+                      <img src="/assets/images/no-post.webp" alt="No Posts" style={{ width: isMobile ? "280px" : "500px"}} />
+                    </div>
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
 
         {/* Pagination */}
-        <div className="d-flex justify-content-center mt-3">
+        <div className="d-flex justify-content-end mt-3">
           <button
             className="btn btn-outline-secondary mx-2 bg-black text-white"
             disabled={currentPage === 1}
             onClick={() => handlePageChange(currentPage - 1)}
           >
-            ◀ Previous
+            <ChevronLeft size={16} /> Previous
           </button>
           <span className="fw-bold align-self-center">Page {currentPage}</span>
           <button
@@ -169,7 +263,7 @@ function PostList() {
             disabled={!hasMorePages}
             onClick={() => handlePageChange(currentPage + 1)}
           >
-            Next ▶
+            Next <ChevronRight size={16} />
           </button>
         </div>
       </div>
@@ -185,9 +279,10 @@ function PostList() {
             <X size={20} />
           </button>
         </Modal.Header>
-        <Modal.Body>
+        <Modal.Body style={{ overflowY: "auto", maxHeight: "70vh" }}>
           <div
             dangerouslySetInnerHTML={{ __html: selectedPost?.content.rendered }}
+            style={{ wordWrap: "break-word" }}
           />
         </Modal.Body>
       </Modal>

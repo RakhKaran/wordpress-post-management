@@ -1,21 +1,24 @@
-const mysql = require('mysql2'); // Use mysql2 for better async support
-const {dbUser, dbDatabase, dbHOST, dbPassword} = require("./env");
+const { Sequelize } = require('sequelize');
+const { dbUser, dbDatabase, dbHOST, dbPassword } = require("./env");
 
-const db = mysql.createConnection({
-    host: dbHOST,
-    database: dbDatabase,
-    user: dbUser,
-    password: dbPassword,
+const sequelize = new Sequelize(dbDatabase, dbUser, dbPassword, {
+  host: dbHOST,
+  dialect: 'mysql',
+  logging: console.log, // ✅ Logs all SQL queries
 });
 
-const connectDB = () => {
-  db.connect(err => {
-    if (err) {
-      console.error('❌ Database connection failed:', err.message);
-      process.exit(1); // Exit process if DB connection fails
-    }
+const connectDB = async () => {
+  try {
+    await sequelize.authenticate();
     console.log('✅ Database connected successfully');
-  });
+
+    // await sequelize.sync({ alter: true }); // Automatically syncs models
+    // console.log('✅ All models were synchronized successfully.');
+
+  } catch (error) {
+    console.error('❌ Database connection failed:', error.message);
+    process.exit(1);
+  }
 };
 
-module.exports = { db, connectDB };
+module.exports = { sequelize, connectDB };

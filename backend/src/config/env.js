@@ -1,6 +1,7 @@
 require('dotenv').config();
 
 module.exports = {
+  hosturl: process.env.HOST_URL,
   siteUrl: process.env.SITE_URL,
   wpUsername: process.env.WP_USERNAME,
   wpPassword: process.env.WP_PASSWORD,
