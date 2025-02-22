@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { getPostById, updatePosts } from "../api/post";
 import { ArrowLeft, X } from "lucide-react";
@@ -16,7 +16,7 @@ function UpdatePost() {
     const [name, setName] = useState('');
     const [phone, setPhone] = useState('');
     const [fields, setFields] = useState([]);
-    const content = `
+    const content = useMemo(() =>`
     <body style="margin: 0; padding: 0; font-family: 'Arial', sans-serif; background-color: #f0f4f8; color: #333;">
     <header style="background: linear-gradient(135deg, #0078d7, #00bfff); color: white; padding: 20px 15px; text-align: center; border-bottom: 3px solid #0056b3;">
         <h1 style="margin: 0; font-size: 2.5rem;">Provider Details</h1>
@@ -41,7 +41,7 @@ function UpdatePost() {
     <footer style="background-color: #f9f9f9; text-align: center; padding: 15px 10px; font-size: 0.9rem; color: #666; border-top: 1px solid #ddd;">
         &copy; 2025 Healthcare Providers Directory. All Rights Reserved.
     </footer>
-    </body>`    
+    </body>`,[fields, name, phone])    
     const { postId } = params;
 
     useEffect(() => {
@@ -84,6 +84,8 @@ function UpdatePost() {
                 phoneNumber: phone,
                 postFields : fields
             };
+
+            console.log(data);
             const response = await updatePosts(data); // Send updated data
             if(response.status === 1){
                 Swal.fire({

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from 'react-router-dom';
+import * as XLSX from 'xlsx';
 import Swal from "sweetalert2";
 import { Modal } from "react-bootstrap-v5";
 import { X, Eye, Pencil, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -19,8 +20,9 @@ function PostList() {
   const [hasMorePages, setHasMorePages] = useState(true);
   const [selectedPost, setSelectedPost] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [sort, setSort] = useState('DESC');
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-  const perPage = 10;
+  const [perPage, setPerPage] = useState(10);
 
   // Filters
   const [status, setStatus] = useState("any");
@@ -47,11 +49,12 @@ function PostList() {
           status,
           startDate ? startDate.toISOString() : null,
           endDate ? endDate.toISOString() : null,
-          searchTerm
+          searchTerm,
+          sort
         );
 
-      setPosts(data || []);
-      setHasMorePages(data?.length === perPage);
+      setPosts(data.data || []);
+      setHasMorePages(currentPage * perPage < data?.total);
     } catch (err) {
       console.error("Error loading posts:", err);
     }
@@ -59,7 +62,7 @@ function PostList() {
 
   useEffect(() => {
     loadPosts();
-  }, [currentPage, searchTerm, status, startDate, endDate]);
+  }, [currentPage, perPage, searchTerm, status, startDate, endDate, sort]);
 
   const handleDelete = async (id) => {
     try {
@@ -105,11 +108,14 @@ function PostList() {
   const handleStatusChange = async(post, status) => {
     try{
       const data = {
-        postId : post.id,
-        postTitle: `${post.title.rendered}`,
-        postSlug: post.slug,
-        status,
-        postContent: `${post.content.rendered}`
+      postId : post.postId,
+      postTitle: `${post.postTitle}`,
+      postSlug: post.postSlug,
+      postContent: `${post.postContent}`,
+      status,
+      name: post.name,
+      phoneNumber: post.phoneNumber,
+      postFields: typeof post.postFields === "string" ? JSON.parse(post.postFields) : post.postFields
     };
     console.log('data', data);
     const response = await updatePosts(data);
@@ -123,6 +129,44 @@ function PostList() {
       console.error("error :",error);
     }
   }
+
+  const formatDate = (dateString) => {
+    const date = new Date(dateString);
+    const options = { day: "2-digit", month: "short", year: "numeric" };
+    return date.toLocaleDateString("en-US", options);
+  };
+  
+  const printData = () => {
+    const columnNames = [
+      { label: "Title", key: "title" },
+      { label: "PostId", key: "postId" },
+      { label: "Slug", key: "slug" },
+      { label: "Website URL", key: "websiteUrl"},
+      { label: "Created At", key: "createdAt" },
+      { label: "Status", key: "status" },
+    ];
+  
+    const filteredTableData = posts.map((data) => ({
+      title: data.postTitle,
+      postId: data.postId,
+      slug: data.postSlug ? data.postSlug : "",
+      websiteUrl: `${site_url}/${data.postSlug}`,
+      createdAt: formatDate(data.createdAt),
+      status: data.isActive ? "Active" : "Banned",
+    }));
+  
+    const excelData = [
+      columnNames.map((col) => col.label), // Headers
+      ...filteredTableData.map((row) => columnNames.map((col) => row[col.key])), // Data rows
+    ];
+  
+    const fileName = "Posts.xlsx";
+    const ws = XLSX.utils.aoa_to_sheet(excelData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Posts Master");
+    XLSX.writeFile(wb, fileName);
+  };
+  
 
   return (
     <div className="d-flex flex-column align-items-center vh-100" style={{ backgroundColor: "#fafafb" }}>
@@ -138,7 +182,10 @@ function PostList() {
             className="form-control border-0 shadow-sm"
           />
 
-          <button onClick={() => navigate(paths.posts.create)} className="btn btn-primary fw-bold px-4">+ Add Post</button>
+          <div style={{display: 'flex', gap: '10px', alignItems: 'center'}}>
+            <button onClick={() => printData()} className="btn btn-primary fw-bold px-4">Export</button>
+            <button onClick={() => navigate(paths.posts.create)} className="btn btn-primary fw-bold px-4">+ Add Post</button>
+          </div>
         </div>
         
         <div className="d-flex justify-content-start align-items-center mb-3">
@@ -151,6 +198,16 @@ function PostList() {
               <option value="any">All posts</option>
               <option value="draft">Draft</option>
               <option value="publish">Published</option>
+          </select>
+
+          {/* sorting modes */}
+          <select
+              className="form-select w-25 mx-2"
+              value={sort}
+              onChange={(e) => setSort(e.target.value)}
+            >
+              <option value="DESC">Newest First</option>
+              <option value="ASC">Oldest First</option>
           </select>
 
           {/* Date Range Picker */}
@@ -172,7 +229,7 @@ function PostList() {
         </div>
 
         {/* Table */}
-        <div className="table-responsive">
+        <div className="table-responsive" style={{ maxHeight: "500px", overflowY: "auto" }}>
           <table className="table table-hover">
             <thead className="table-dark">
               <tr>
@@ -185,7 +242,7 @@ function PostList() {
             <tbody>
               {posts.length > 0 ? posts.map((post, i) => (
                 <tr key={i} style={{ backgroundColor: i % 2 === 0 ? "#f8f9fa" : "white" }}>
-                  <td className="fw-bold">{post.title.rendered}</td>
+                  <td className="fw-bold">{post.postTitle}</td>
                   <td className="text-center">
                     <select
                       value={post.status}
@@ -212,7 +269,7 @@ function PostList() {
                       </button>
                       <button
                         className="btn btn-info btn-sm text-white mx-1 d-flex align-items-center"
-                        onClick={() => handleSiteViewPost(post.slug)}
+                        onClick={() => handleSiteViewPost(post.postSlug)}
                       >
                         {isMobile ? 'Site' : 'Site View'}
                       </button>
@@ -221,13 +278,13 @@ function PostList() {
 
                   <td className="text-center" style={{ whiteSpace: "nowrap", width: "25%" }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "4px" }}>
-                      <button onClick={() => {navigate(paths.posts.update(post?.id))}} className="btn btn-warning btn-sm text-white mx-1 d-flex align-items-center">
+                      <button onClick={() => {navigate(paths.posts.update(post?.postId))}} className="btn btn-warning btn-sm text-white mx-1 d-flex align-items-center">
                         <Pencil size={16} className="me-1" />
                         {isMobile ? '' : 'Edit'}
                       </button>
                       <button
                         className="btn btn-danger btn-sm d-flex align-items-center"
-                        onClick={() => handleDelete(post.id)}
+                        onClick={() => handleDelete(post.postId)}
                       >
                         <Trash2 size={16} className="me-1" />
                         {isMobile ? '' : 'Delete'}
@@ -250,6 +307,22 @@ function PostList() {
 
         {/* Pagination */}
         <div className="d-flex justify-content-end mt-3">
+          <select
+            value={perPage}
+            onChange={(e) => setPerPage(Number(e.target.value))}
+            className="form-select form-select-sm"
+            style={{
+              width : '70px',
+              height : '40px',
+              marginRight : '10px'
+            }}
+          >
+            <option value={10} style={{ color: "#dc3545" }}>10</option>
+            <option value={20} style={{ color: "#198754" }}>20</option>
+            <option value={40} style={{ color: "#198754" }}>40</option>
+            <option value={80} style={{ color: "#198754" }}>80</option>
+            <option value={100} style={{ color: "#198754" }}>100</option>
+          </select>
           <button
             className="btn btn-outline-secondary mx-2 bg-black text-white"
             disabled={currentPage === 1}
@@ -271,7 +344,7 @@ function PostList() {
       {/* Modal for Viewing Post */}
       <Modal show={showModal} onHide={() => setShowModal(false)} centered>
         <Modal.Header>
-          <Modal.Title>{selectedPost?.title.rendered}</Modal.Title>
+          <Modal.Title>{selectedPost?.postTitle}</Modal.Title>
           <button 
             className="btn btn-light border-0" 
             onClick={() => setShowModal(false)}
@@ -281,7 +354,7 @@ function PostList() {
         </Modal.Header>
         <Modal.Body style={{ overflowY: "auto", maxHeight: "70vh" }}>
           <div
-            dangerouslySetInnerHTML={{ __html: selectedPost?.content.rendered }}
+            dangerouslySetInnerHTML={{ __html: selectedPost?.postContent }}
             style={{ wordWrap: "break-word" }}
           />
         </Modal.Body>

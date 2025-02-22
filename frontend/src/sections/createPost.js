@@ -161,14 +161,19 @@ export default function CreatePost() {
           "Practice Name": item.Practice_Name || ''  // Add quotes here
         };
         
-  
+        // Convert object to the desired array format
+        const formattedFields = Object.entries(fields).map(([key, value]) => ({
+          fieldName: key,
+          fieldValue: value,
+        }));
+
         return {
           postTitle : title,
           postSlug : slug,
           status: 'publish',
           name,
           phoneNumber : phone,
-          postFields : fields,
+          postFields : formattedFields,
           postContent :`
           <body style="margin: 0; padding: 0; font-family: 'Arial', sans-serif; background-color: #f0f4f8; color: #333;">
           <header style="background: linear-gradient(135deg, #0078d7, #00bfff); color: white; padding: 20px 15px; text-align: center; border-bottom: 3px solid #0056b3;">

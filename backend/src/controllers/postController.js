@@ -31,12 +31,15 @@ const createPost = async (req, res) => {
 
 const updatePost = async (req, res) => {
   try {
-    const { postId, postTitle, postContent, postSlug, status } = req.body;
+    const { postId, postTitle, postContent, postSlug, status, name, phoneNumber, postFields } = req.body;
     const updateData = {
       title : postTitle,
       slug : postSlug,
       content : postContent,
-      status : status
+      status : status,
+      name,
+      phoneNumber,
+      postFields
     }
     const updatedPost = await postService.updateWordPressPost(postId, updateData);
     res.json({ status: 1, message: 'Post updated successfully', data: updatedPost });

@@ -2,16 +2,17 @@ import axios from "axios";
 import { endpoints } from "../config/apiConfig";
 
 // Fetch all posts
-export const fetchAllPosts = async (perPage, currentPage, status, modified_after, modified_before, search) => {
+export const fetchAllPosts = async (perPage, currentPage, status, created_after, created_before, search, sort) => {
   try {
     const queryParams = new URLSearchParams({
       per_page: perPage,
       page: currentPage,
       status: status || "any",
+      sort: sort || "DESC"
     });
 
-    if (modified_after) queryParams.append("modified_after", modified_after);
-    if (modified_before) queryParams.append("modified_before", modified_before);
+    if (created_after) queryParams.append("modified_after", created_after);
+    if (created_before) queryParams.append("modified_before", created_before);
     if (search) queryParams.append("search", search); // Add search parameter
 
     const response = await axios.get(`${endpoints.posts.list}?${queryParams.toString()}`);
@@ -57,7 +58,7 @@ export const createPost = async ({postTitle, postSlug, status, postContent, post
 // Bult Create Posts
 export const bulkCreatePosts = async (data) => {
   try{
-    const testData = data.slice(0, 10); // Take only the first 10 items
+    const testData = data.slice(91, 120); // Take only the first 10 items
     const response = await axios.post(`${endpoints.posts.createBulk}`, {posts : testData});
     return response.data;
   }catch(error){

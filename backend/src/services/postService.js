@@ -2,17 +2,76 @@ const axios = require('axios');
 const { Posts } = require('../models');
 const { siteUrl } = require('../config/env'); // Import siteUrl from env.js
 const { getWordPressAuthToken } = require('../utils/wordpressAuth'); // Import auth token
+const { Op } = require('sequelize');
 
 const authHeader = {
   Authorization: getWordPressAuthToken(),
   'Content-Type': 'application/json',
 };
 
+// const getAllWordPressPosts = async (queryParams = {}) => {
+//   try {
+//     const { per_page, page, status, created_after, created_before } = queryParams;
+
+//     const query = {
+//       limit : parseInt(per_page) || 10,
+//       offset : parseInt(page)  || 0,
+//     };
+
+//     if(status !== 'any'){
+//       query["status"] = status;
+//     }
+
+//     if(created_after){
+//       query["createdAt"] = created_after
+//     }
+
+//     // const response = await axios.get(`${siteUrl}/wp-json/wp/v2/posts?${queryString}`, { headers: authHeader });
+//     const response = await Posts.findAll();
+//     return response;
+//   } catch (error) {
+//     console.log(error);
+//     throw new Error(error.message);
+//   }
+// };
+
 const getAllWordPressPosts = async (queryParams = {}) => {
   try {
-    const queryString = new URLSearchParams(queryParams).toString();
-    const response = await axios.get(`${siteUrl}/wp-json/wp/v2/posts?${queryString}`, { headers: authHeader });
-    return response.data;
+    const { per_page, page, status, modified_after, search, sort } = queryParams;
+
+    const limit = per_page ? parseInt(per_page) : 10;
+    const offset = page && parseInt(page) > 0 ? (parseInt(page) - 1) * limit : 0;
+
+    const where = {};
+
+    if (status && status !== "any") {
+      where.status = status;
+    }
+
+    if (modified_after) {
+      where.created_at = { [Op.gte]: new Date(modified_after) };
+    }
+
+    if (search) {
+      where[Op.or] = [
+        { postTitle: { [Op.like]: `%${search}%` } },
+        { postContent: { [Op.like]: `%${search}%` } } 
+      ];
+    }
+
+    const response = await Posts.findAndCountAll({
+      where,
+      limit,
+      offset,
+      order: [["updatedAt", `${sort}`]],
+    });
+
+    return {
+      data: response.rows,
+      total: response.count,
+      current_page: page ? parseInt(page) : 1,
+      per_page: limit,
+    };
   } catch (error) {
     console.log(error);
     throw new Error(error.message);
@@ -75,7 +134,13 @@ const createWordPressPost = async postData => {
 
 const updateWordPressPost = async (postId, updateData) => {
   try {
-    const response = await axios.post(`${siteUrl}/wp-json/wp/v2/posts/${postId}`, updateData, { headers: authHeader });
+    const payload = {
+      title : updateData.title,
+      slug : updateData.slug,
+      content : updateData.content,
+      status : updateData.status,
+    }
+    const response = await axios.post(`${siteUrl}/wp-json/wp/v2/posts/${postId}`, payload, { headers: authHeader });
     if(response.data){
       const data = {
         postTitle : updateData.title,
